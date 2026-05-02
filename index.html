@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NASA AI Satellite Analyzer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+
+<body>
+<div class="page-bg"></div>
+
+<div class="dashboard">
+
+    <aside class="sidebar">
+        <div class="brand">
+            <div class="logo">🛰️</div>
+            <div>
+                <h1>NASA AI</h1>
+                <p>Satellite Intelligence Dashboard</p>
+            </div>
+        </div>
+
+        <div class="panel upload-panel">
+            <div class="panel-head">
+                <h2>Upload Images</h2>
+                <span>LIVE</span>
+            </div>
+
+            <form method="POST" enctype="multipart/form-data">
+                <label class="upload-box">
+                    <div class="upload-icon">☁️</div>
+                    <h3>Past Satellite Image</h3>
+                    <p>Select old location image</p>
+                    <input type="file" name="past_image" required>
+                </label>
+
+                <label class="upload-box">
+                    <div class="upload-icon">🌍</div>
+                    <h3>Present Satellite Image</h3>
+                    <p>Select recent location image</p>
+                    <input type="file" name="present_image" required>
+                </label>
+
+                <button type="submit">Analyze Satellite Image</button>
+            </form>
+        </div>
+
+        {% if change_percent is not none %}
+        <div class="panel result-panel">
+            <div class="panel-head">
+                <h2>Prediction Result</h2>
+                <span>DONE</span>
+            </div>
+            <h1 class="prediction">Change Detected</h1>
+            <h3>Accuracy: {{ change_percent }}%</h3>
+        </div>
+
+        <div class="panel">
+            <h2>Quick Summary</h2>
+            <div class="stat"><p>Change Percentage</p><b>{{ change_percent }}%</b></div>
+            <div class="stat"><p>Changed Pixels</p><b>{{ changed_pixels }}</b></div>
+            <div class="stat"><p>Total Pixels</p><b>{{ total_pixels }}</b></div>
+        </div>
+
+        <div class="panel">
+            <h2>Region Insights</h2>
+
+            <div class="progress-row">
+                <p>Vegetation <span>{{ veg_change }}%</span></p>
+                <div class="bar"><div style="width:{{ veg_change }}%"></div></div>
+            </div>
+
+            <div class="progress-row water">
+                <p>Water <span>{{ water_change }}%</span></p>
+                <div class="bar"><div style="width:{{ water_change }}%"></div></div>
+            </div>
+
+            <div class="progress-row urban">
+                <p>Urban <span>{{ urban_change }}%</span></p>
+                <div class="bar"><div style="width:{{ urban_change }}%"></div></div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Downloads</h2>
+            <a href="/download-report" class="download-btn">Download Report</a>
+            <a href="/download-result" class="download-btn">Download Result Image</a>
+        </div>
+        {% endif %}
+    </aside>
+
+    <main class="main">
+        <div class="top-title">
+            <div>
+                <h1>Satellite Analysis Viewer</h1>
+                <p>Advanced remote sensing, change detection, heatmap and object analysis</p>
+            </div>
+            <div class="status-card">
+                <span></span>
+                System Ready
+            </div>
+        </div>
+
+        {% if past_path and present_path %}
+
+        <section class="hero-grid">
+            <div class="glass-card slider-card">
+                <div class="section-head">
+                    <div>
+                        <h2>Before / After Analysis</h2>
+                        <p>Move the slider to compare past and present image</p>
+                    </div>
+                    <span>Image Compare</span>
+                </div>
+
+                <div class="compare-container" id="compareContainer">
+                    <img src="{{ past_path }}" class="base-image">
+                    <div class="overlay" id="overlay">
+                        <img src="{{ present_path }}">
+                    </div>
+                    <div class="slider" id="slider"></div>
+                </div>
+            </div>
+
+            <div class="glass-card graph-card">
+                <div class="section-head">
+                    <div>
+                        <h2>Prediction Confidence</h2>
+                        <p>Region-wise change percentage</p>
+                    </div>
+                    <span>Live Graph</span>
+                </div>
+                <canvas id="changeChart"></canvas>
+            </div>
+        </section>
+
+        <section class="output-grid">
+            <div class="glass-card">
+                <div class="section-head">
+                    <div>
+                        <h2>Changed Region Output</h2>
+                        <p>Detected land difference with highlighted regions</p>
+                    </div>
+                </div>
+                <img src="{{ result_path }}" class="output-img">
+            </div>
+
+            <div class="glass-card">
+                <div class="section-head">
+                    <div>
+                        <h2>Heatmap Output</h2>
+                        <p>High change areas are highlighted using heatmap</p>
+                    </div>
+                </div>
+                <img src="{{ heatmap_path }}" class="output-img">
+            </div>
+
+            <div class="glass-card object-card">
+                <div class="section-head">
+                    <div>
+                        <h2>Object Detection Output</h2>
+                        <p>Detected visual objects from present satellite image</p>
+                    </div>
+                </div>
+
+                {% if object_image %}
+                    <img src="{{ object_image }}" class="output-img">
+                    <div class="object-list">
+                        <h3>Detected Objects</h3>
+                        <p>{{ detected_objects | join(', ') }}</p>
+                    </div>
+                {% else %}
+                    <p>No objects detected</p>
+                {% endif %}
+            </div>
+        </section>
+
+        {% else %}
+
+        <section class="empty-state">
+            <div class="orbit">🛰️</div>
+            <h2>No Analysis Yet</h2>
+            <p>Upload past and present satellite images to detect land differences.</p>
+        </section>
+
+        {% endif %}
+    </main>
+
+</div>
+
+<script>
+const slider = document.getElementById("slider");
+const overlay = document.getElementById("overlay");
+const compareContainer = document.getElementById("compareContainer");
+
+let isDragging = false;
+
+if (slider && overlay && compareContainer) {
+    slider.addEventListener("mousedown", () => isDragging = true);
+    window.addEventListener("mouseup", () => isDragging = false);
+
+    window.addEventListener("mousemove", (e) => {
+        if (!isDragging) return;
+
+        const rect = compareContainer.getBoundingClientRect();
+        let x = e.clientX - rect.left;
+
+        if (x < 0) x = 0;
+        if (x > rect.width) x = rect.width;
+
+        const percent = (x / rect.width) * 100;
+        overlay.style.width = percent + "%";
+        slider.style.left = percent + "%";
+    });
+}
+</script>
+
+<script>
+const graphLabels = {{ graph_labels | tojson }};
+const graphValues = {{ graph_values | tojson }};
+const chartCanvas = document.getElementById("changeChart");
+
+if (chartCanvas && graphLabels.length > 0) {
+    new Chart(chartCanvas, {
+        type: "bar",
+        data: {
+            labels: graphLabels,
+            datasets: [{
+                label: "Change %",
+                data: graphValues,
+                backgroundColor: ["#22c55e", "#38bdf8", "#ec4899"],
+                borderRadius: 14,
+                barThickness: 45
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { labels: { color: "#e5f6ff" } }
+            },
+            scales: {
+                x: {
+                    ticks: { color: "#dbeafe", font: { size: 12 } },
+                    grid: { color: "rgba(255,255,255,0.05)" }
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: { color: "#dbeafe" },
+                    grid: { color: "rgba(255,255,255,0.08)" }
+                }
+            }
+        }
+    });
+}
+</script>
+
+</body>
+</html>
